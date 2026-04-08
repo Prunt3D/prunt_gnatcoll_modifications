@@ -494,6 +494,12 @@ package body Prunt.JSON is
    -- Read --
    ----------
 
+   function Read (Strm : String) return Read_Result;
+   --  Parse the UTF-8 JSON document in Strm and return the value or parsing error.
+
+   function Read (Strm : String; Filename : String := "<data>") return JSON_Value;
+   --  Parse the UTF-8 JSON document in Strm and raise Invalid_JSON_Stream on parsing errors.
+
    function Read (Strm : String) return Read_Result is
       use GNATCOLL.Buffer;
       Data : Reader := Open_String (Strm);
