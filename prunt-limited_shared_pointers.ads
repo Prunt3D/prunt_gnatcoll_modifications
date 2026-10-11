@@ -41,6 +41,7 @@ generic
    with procedure Release (Self : in out Element_Type) is null;
    --  This procedure should be used if you need to perform actions when the last reference to an element is removed.
    --  Typically, this is used to free element_type and its contents, when it is not a controlled type.
+   --  The element is finalized and deallocated after Release, including when Release raises an exception.
 
    Atomic_Counters : Boolean := True;
    --  Whether to use atomic (and thus thread-safe) counters. If set to True, the smart pointer is task safe. Of

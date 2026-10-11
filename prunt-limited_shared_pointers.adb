@@ -339,7 +339,13 @@ package body Prunt.Limited_Shared_Pointers is
                Finalize (R.Weak_Data, Atomic_Counters);
             end if;
 
-            Release (Data.all);
+            begin
+               Release (Data.all);
+            exception
+               when others =>
+                  Unchecked_Free (Data);
+                  raise;
+            end;
             Unchecked_Free (Data); -- using storage_pool
 
          end if;
