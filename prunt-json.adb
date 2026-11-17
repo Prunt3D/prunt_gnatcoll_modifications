@@ -1379,7 +1379,8 @@ package body Prunt.JSON is
             return Left.Data.Flt_Value = Right.Data.Flt_Value;
 
          when JSON_String_Type  =>
-            return Left.Data.Str_Value.all = Right.Data.Str_Value.all;
+            --  Compare only the text. Cnt counts live aliases, so equal strings can have different counts.
+            return Left.Data.Str_Value.Str = Right.Data.Str_Value.Str;
 
          when JSON_Array_Type   =>
             --  Same pointer ?
