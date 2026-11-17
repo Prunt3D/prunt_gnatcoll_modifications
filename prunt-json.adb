@@ -490,6 +490,32 @@ package body Prunt.JSON is
 
    end Parse_Next;
 
+   --------------------------
+   -- To_Finite_Long_Float --
+   --------------------------
+
+   function To_Finite_Long_Float (Token_Text : String) return Long_Float;
+   --  Convert a number token that Parse_Next accepted. Raise Invalid_JSON_Stream if it is outside the finite range of
+   --  Long_Float. Long_Float'Value returns an infinity on overflow rather than raising, but Constraint_Error is also
+   --  handled in case the runtime or check settings make it raise instead. Underflow rounds to zero and is accepted.
+
+   function To_Finite_Long_Float (Token_Text : String) return Long_Float is
+      Result : Long_Float;
+   begin
+      begin
+         Result := Long_Float'Value (Token_Text);
+      exception
+         when Constraint_Error =>
+            raise Invalid_JSON_Stream with "number out of range";
+      end;
+
+      if not Result'Valid then
+         raise Invalid_JSON_Stream with "number out of range";
+      end if;
+
+      return Result;
+   end To_Finite_Long_Float;
+
    ----------
    -- Read --
    ----------
@@ -607,14 +633,14 @@ package body Prunt.JSON is
                         Failed := True;
                   end;
                   if Failed then
-                     Tmp := Create (Long_Float'Value (Token (Data, Event.First, Event.Last)));
+                     Tmp := Create (To_Finite_Long_Float (Token (Data, Event.First, Event.Last)));
                   else
                      Tmp := Create (Int_Value);
                   end if;
                end;
 
             when NUMBER_VALUE  =>
-               Tmp := Create (Long_Float'Value (Token (Data, Event.First, Event.Last)));
+               Tmp := Create (To_Finite_Long_Float (Token (Data, Event.First, Event.Last)));
 
             when TRUE_VALUE    =>
                Tmp := Create (True);
@@ -684,6 +710,10 @@ package body Prunt.JSON is
             return
               (Success => False, Error => (Line, Column, To_Virtual_String (Ada.Exceptions.Exception_Message (E))));
          end;
+      when others =>
+         --  Read_States is not controlled, so free it here too. Parser frees its own state when finalized.
+         Free (Read_States);
+         raise;
    end Read;
 
    ---------------
