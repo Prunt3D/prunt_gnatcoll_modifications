@@ -1591,66 +1591,66 @@ package body Prunt.JSON is
 
             if Char = 'u' or else Char = 'U' then
                declare
-                  Hex_Str : Virtual_String := "";
-                  Lead    : Unsigned_16;
-                  Trail   : Unsigned_16;
-                  Decoded : VSS.Characters.Virtual_Character;
+                  subtype High_Surrogate is Unsigned_16 range 16#D800# .. 16#DBFF#;
+                  subtype Low_Surrogate is Unsigned_16 range 16#DC00# .. 16#DFFF#;
 
-               begin
-                  for I in 1 .. 4 loop
-                     if not Iterator.Forward then
-                        raise Invalid_JSON_Stream with "Incomplete unicode escape sequence";
-                     end if;
-                     Hex_Str.Append (Iterator.Element);
-                  end loop;
+                  function Read_Code_Unit return Unsigned_16;
+                  --  Read the four hexadecimal digits after the iterator as one UTF-16 code unit.
 
+                  --------------------
+                  -- Read_Code_Unit --
+                  --------------------
+
+                  function Read_Code_Unit return Unsigned_16 is
+                     Hex_Str : Virtual_String := "";
                   begin
-                     Lead := Unsigned_16'Value (To_UTF_8_String ("16#" & Hex_Str & "#"));
+                     for I in 1 .. 4 loop
+                        if not Iterator.Forward then
+                           raise Invalid_JSON_Stream with "Incomplete unicode escape sequence";
+                        end if;
+                        Hex_Str.Append (Iterator.Element);
+                     end loop;
+
+                     return Unsigned_16'Value (To_UTF_8_String ("16#" & Hex_Str & "#"));
                   exception
                      when Constraint_Error =>
                         raise Invalid_JSON_Stream with "Invalid unicode escape sequence";
-                  end;
-                  Decoded := VSS.Characters.Virtual_Character'Val (Lead);
+                  end Read_Code_Unit;
 
-                  --  If character is high surrogate and next character is
-                  --  low surrogate then them represent one non-BMP
-                  --  character.
+                  Lead  : constant Unsigned_16 := Read_Code_Unit;
+                  Trail : Unsigned_16;
 
-                  if Lead in 16#D800# .. 16#DBFF# then
-                     if not Iterator.Forward then
-                        raise Invalid_JSON_Stream with "Incomplete surrogate pair";
+               begin
+                  --  Surrogate code points are not characters, so a high surrogate must be followed by a low surrogate
+                  --  escape and the pair is combined into one non-BMP character before conversion.
+
+                  if Lead in Low_Surrogate then
+                     raise Invalid_JSON_Stream with "Unpaired low surrogate in unicode escape sequence";
+
+                  elsif Lead in High_Surrogate then
+                     if not Iterator.Forward
+                       or else Iterator.Element /= '\'
+                       or else not Iterator.Forward
+                       or else (Iterator.Element /= 'u' and then Iterator.Element /= 'U')
+                     then
+                        raise Invalid_JSON_Stream with "Unpaired high surrogate in unicode escape sequence";
                      end if;
 
-                     if Iterator.Element = '\' then
-                        if not Iterator.Forward then
-                           raise Invalid_JSON_Stream with "Incomplete surrogate pair";
-                        end if;
+                     Trail := Read_Code_Unit;
 
-                        Char := Iterator.Element;
-                        if Char = 'u' or else Char = 'U' then
-                           for I in 1 .. 4 loop
-                              if not Iterator.Forward then
-                                 raise Invalid_JSON_Stream with "Incomplete unicode escape sequence";
-                              end if;
-                              Hex_Str.Append (Iterator.Element);
-                           end loop;
-
-                           begin
-                              Trail := Unsigned_16'Value (To_UTF_8_String ("16#" & Hex_Str & "#"));
-                           exception
-                              when Constraint_Error =>
-                                 raise Invalid_JSON_Stream with "Invalid unicode escape sequence";
-                           end;
-                           Decoded :=
-                             VSS.Characters.Virtual_Character'Val
-                               (16#1_0000#
-                                + Unsigned_32 (Lead and 16#03FF#) * 16#0400#
-                                + Unsigned_32 (Trail and 16#03FF#));
-                        end if;
+                     if Trail not in Low_Surrogate then
+                        raise Invalid_JSON_Stream with "Unpaired high surrogate in unicode escape sequence";
                      end if;
+
+                     Result.Append
+                       (VSS.Characters.Virtual_Character'Val
+                          (16#1_0000#
+                           + Unsigned_32 (Lead - High_Surrogate'First) * 16#0400#
+                           + Unsigned_32 (Trail - Low_Surrogate'First)));
+
+                  else
+                     Result.Append (VSS.Characters.Virtual_Character'Val (Lead));
                   end if;
-
-                  Result.Append (Decoded);
                end;
 
             elsif Char = VSS.Characters.Latin.Quotation_Mark then
