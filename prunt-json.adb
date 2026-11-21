@@ -28,6 +28,8 @@
 with Ada.Characters.Handling; use Ada.Characters.Handling;
 with Ada.Containers;          use Ada.Containers;
 with Ada.Exceptions;
+with Ada.Long_Float_Text_IO;
+with Ada.Strings.Fixed;
 with Ada.Text_IO;
 with Ada.Unchecked_Deallocation;
 with GNATCOLL.Atomic;         use GNATCOLL.Atomic;
@@ -776,12 +778,44 @@ package body Prunt.JSON is
 
          when JSON_Float_Type   =>
             declare
-               S : constant String := Item.Data.Flt_Value'Img;
+               Value : constant Long_Float := Item.Data.Flt_Value;
+
+               function Image (Aft : Natural) return String;
+               --  Value with Aft digits after the point, in the format of Long_Float'Image without its leading space.
+
+               function Reads_Back (Image : String) return Boolean;
+               --  Whether Image reads back as Value.
+
+               function Image (Aft : Natural) return String is
+                  Buffer : String (1 .. 64);
+               begin
+                  Ada.Long_Float_Text_IO.Put (Buffer, Value, Aft => Aft, Exp => 3);
+                  return Ada.Strings.Fixed.Trim (Buffer, Ada.Strings.Left);
+               end Image;
+
+               function Reads_Back (Image : String) return Boolean is
+               begin
+                  return Long_Float'Value (Image) = Value;
+               exception
+                  when Constraint_Error =>
+                     return False;
+               end Reads_Back;
+
+               S : constant String := Value'Img;
             begin
-               if S (S'First) = ' ' then
-                  Ret.Append (To_Virtual_String (S (S'First + 1 .. S'Last)));
+               --  Long_Float'Image has Long_Float'Digits significant digits, which do not always read back as the same
+               --  value: Long_Float'Last reads back as an infinity, which Read rejects. Up to two more digits are
+               --  added when they are needed, which is enough for any finite value.
+               if not Value'Valid or else Reads_Back (S) then
+                  if S (S'First) = ' ' then
+                     Ret.Append (To_Virtual_String (S (S'First + 1 .. S'Last)));
+                  else
+                     Ret.Append (To_Virtual_String (S));
+                  end if;
+               elsif Reads_Back (Image (Long_Float'Digits)) then
+                  Ret.Append (To_Virtual_String (Image (Long_Float'Digits)));
                else
-                  Ret.Append (To_Virtual_String (S));
+                  Ret.Append (To_Virtual_String (Image (Long_Float'Digits + 1)));
                end if;
             end;
 
